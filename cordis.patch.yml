@@ -1,0 +1,8 @@
+# dsh-reply-timer bundle layer — insert one loader entry for the plugin
+# package. The browser half is picked up by dsh-client-modules through the
+# package's dsh.client declaration. The host half owns all timing: it listens
+# to session/event + agent/assistant-stream, measures the three-segment ledger,
+# persists history to samples.json, and serves a read-only state route.
+- insert:
+    - id: dsh-reply-timer
+      name: dsh-reply-timer

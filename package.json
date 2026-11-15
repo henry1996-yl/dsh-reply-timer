@@ -1,0 +1,71 @@
+{
+  "name": "dsh-reply-timer",
+  "version": "2.0.0",
+  "description": "会话回复计时器（自适应版）：宿主事件驱动的真实心跳与停滞检测、首字/工具/生成三段账本、按同类历史的参考用时区间，刷新与重启后仍在。",
+  "license": "MIT",
+  "author": "dsh-reply-timer contributors",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/henry1996-yl/dsh-reply-timer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/henry1996-yl/dsh-reply-timer/issues"
+  },
+  "homepage": "https://github.com/henry1996-yl/dsh-reply-timer#readme",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "LICENSE",
+    "screenshots.json",
+    "screenshots/*.png",
+    "SUBMISSION.md"
+  ],
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "dsh-web",
+    "timer",
+    "latency",
+    "会话计时",
+    "等待时长"
+  ],
+  "engines": {
+    "node": ">=22",
+    "dsh": ">=0.2.2-rc.2 <0.3.0-0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    },
+    "compatibility": {
+      "dshReleases": {
+        "0.2.2-rc.1": "compatible",
+        "0.2.2-rc.2": "compatible",
+        "0.2.2-rc.3": "compatible"
+      }
+    }
+  }
+}

@@ -1,0 +1,10 @@
+# 运行时产物：含本机 session id / 历史样本，绝不能进仓库或发布包
+samples.json
+
+# 本地打包产物
+*.tgz
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+*.swp
