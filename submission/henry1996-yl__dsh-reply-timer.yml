@@ -1,9 +1,10 @@
-# 投稿到 awesome-dsh-plugin 的条目文件（模板）
+# 投稿到 awesome-dsh-plugin 的条目文件（已填好 owner：henry1996-yl）
 #
-# 用法：把本文件复制到 awesome-dsh-plugin 仓库的 data/plugins/ 目录下，
-# 并把文件名里的 henry1996-yl 改成你的 GitHub 用户名，例如：
-#   data/plugins/henry__dsh-reply-timer.yml
-# 同时把下面 url / name 里的 henry1996-yl 一起替换。详见 SUBMISSION.md。
+# 用法：fork awesome-dsh-plugin/awesome-dsh-plugin 后，把本文件原样复制到
+#   data/plugins/henry1996-yl__dsh-reply-timer.yml
+# 然后提交 PR。文件名格式固定为 <owner>__<repo>.yml，无需再改任何内容。
+# 前提：仓库 https://github.com/henry1996-yl/dsh-reply-timer 已公开并加 dsh-plugin
+# topic、且创建满 24 小时（CI 会校验）。详见 SUBMISSION.md。
 #
 # 注意：只有 description.en 是必填；描述里若出现「: 」（冒号+空格）必须整体加引号。
 
