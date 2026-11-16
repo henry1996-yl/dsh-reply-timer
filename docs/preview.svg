@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="300" viewBox="0 0 640 300" role="img" aria-label="Reply timer dock chip under the composer, and its expanded ledger detail">
+  <!-- Left: the composer with the dock chip sitting inside it. -->
+  <rect x="40" y="150" width="330" height="100" rx="18" fill="none" stroke="#8b93a7" stroke-width="2" opacity="0.5"/>
+  <rect x="68" y="172" width="150" height="8" rx="4" fill="#8b93a7" opacity="0.28"/>
+  <rect x="68" y="192" width="210" height="8" rx="4" fill="#8b93a7" opacity="0.28"/>
+
+  <!-- The timer chip: pulse dot + elapsed bar + secondary hint bar. -->
+  <rect x="68" y="214" width="170" height="26" rx="13" fill="#4d8bff" opacity="0.12"/>
+  <rect x="68" y="214" width="170" height="26" rx="13" fill="none" stroke="#4d8bff" stroke-width="1.5" opacity="0.5"/>
+  <circle cx="86" cy="227" r="6" fill="#4d8bff"/>
+  <rect x="102" y="222" width="58" height="10" rx="5" fill="#4d8bff" opacity="0.9"/>
+  <rect x="168" y="222" width="48" height="10" rx="5" fill="#8b93a7" opacity="0.35"/>
+
+  <!-- Bracket: the chip expands into the detail card on the right. -->
+  <path d="M152 250 V258 Q152 264 158 264 H496 Q502 264 502 258 V236"
+        fill="none" stroke="#8b93a7" stroke-width="1.5" stroke-dasharray="4 6" opacity="0.35"/>
+
+  <!-- Right: the expanded ledger — three segments, then the reference range. -->
+  <rect x="406" y="72" width="202" height="164" rx="16" fill="none" stroke="#8b93a7" stroke-width="2" opacity="0.45"/>
+
+  <!-- 首字 / first token -->
+  <rect x="424" y="96" width="34" height="8" rx="4" fill="#8b93a7" opacity="0.3"/>
+  <rect x="470" y="92" width="112" height="16" rx="8" fill="#4d8bff" opacity="0.85"/>
+
+  <!-- 工具 / tool time -->
+  <rect x="424" y="130" width="30" height="8" rx="4" fill="#8b93a7" opacity="0.3"/>
+  <rect x="470" y="126" width="84" height="16" rx="8" fill="#e0a848" opacity="0.9"/>
+
+  <!-- 生成 / generation time -->
+  <rect x="424" y="164" width="36" height="8" rx="4" fill="#8b93a7" opacity="0.3"/>
+  <rect x="470" y="160" width="118" height="16" rx="8" fill="#3aa675" opacity="0.9"/>
+
+  <!-- Reference range learned from similar turns: a track with a highlighted band. -->
+  <rect x="424" y="200" width="166" height="8" rx="4" fill="#8b93a7" opacity="0.22"/>
+  <rect x="470" y="200" width="58" height="8" rx="4" fill="#4d8bff" opacity="0.55"/>
+</svg>

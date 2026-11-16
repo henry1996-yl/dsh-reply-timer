@@ -32,12 +32,16 @@
  * do not inflate the 工具 number — that is the parallel-accounting behaviour.
  *
  * Completed turns are folded into small per-bucket history samples persisted
- * to `samples.json` next to this file, so the reference range survives a
- * browser refresh AND an app restart. `lastDone` keeps each session's most
- * recent ledger, so the 账本 also survives a refresh.
+ * under the DSH profile (`<DSH_HOME>/storages/dsh-reply-timer/samples.json`,
+ * DSH_HOME defaulting to `~/.dsh`), so the reference range survives a browser
+ * refresh AND an app restart without ever writing inside the package folder.
+ * `lastDone` keeps each session's most recent ledger, so the 账本 also survives
+ * a refresh.
  *
  * The Client reads a snapshot through ONE read-only same-origin route,
- * `/reply-timer/state`, fenced by `ctx.connection.requestRejection` exactly as
+ * `/__dsh-reply-timer/state` (the `__dsh-` prefix is the convention every
+ * shipped plugin follows, which keeps the path clear of future Host routes),
+ * fenced by `ctx.connection.requestRejection` exactly as
  * dsh-better-sidebar fences `/sidebar/api` (lib/index.js:10054, 10167-10227).
  * The Client resolves the URL against `document.baseURI` (prefix-safe, works in
  * the Electron `dsh-app://app/` shell) — see client.js.
@@ -46,29 +50,64 @@
  * Everything is registered inside `apply` via `ctx.effect` and returns its own
  * disposer, per dsh-doc practices.
  */
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SAMPLES_FILE = join(HERE, 'samples.json');
 
-export const ROUTE = '/reply-timer/state';
+/**
+ * Persistence lives in the profile's data directory, never inside the package
+ * itself: a package folder is replaced on every update, and an install under
+ * `node_modules` may be read-only. This mirrors dsh-cost-meter
+ * (`~/.dsh/storages/cost-meter/ledger.json`) and dsh-ops / dsh-better-sidebar
+ * (`process.env.DSH_HOME ?? ~/.dsh`).
+ */
+function dshHome() {
+  const fromEnv = process.env.DSH_HOME;
+  if (typeof fromEnv === 'string' && fromEnv.trim() !== '') return fromEnv;
+  return join(homedir(), '.dsh');
+}
+const STORAGE_DIR = join(dshHome(), 'storages', 'dsh-reply-timer');
+const SAMPLES_FILE = join(STORAGE_DIR, 'samples.json');
+/** v2.0.0 wrote samples.json next to index.js; adopt it once, then stop. */
+const LEGACY_SAMPLES_FILE = join(HERE, 'samples.json');
+
+export const ROUTE = '/__dsh-reply-timer/state';
 export const name = 'dsh-reply-timer';
 export const inject = ['webServer', 'connection'];
 
-/** No host activity for this long while running => suspected stall. */
-const STALL_MS = 20000;
+/** No host activity for this long while running => suspected stall.
+ *
+ * Calibrated against 5,424 real idle gaps across 122 completed turns in this
+ * workspace's session logs: p50 0.0s, p90 4.8s, p99 43.4s. Measured per step,
+ * the `step/start` -> first `assistant/message` wait alone has p99 78.2s with
+ * 6.1% of steps above 20s, so a 20s deadline cries wolf on ordinary "the model
+ * is thinking" pauses. 60s keeps the warning meaningful while staying above the
+ * p99 of real idle gaps (0.66% of gaps exceed it, nearly all of them genuine
+ * long waits rather than stalls). */
+const STALL_MS = 60000;
 /** Force-close a running turn this long after its last activity (no turn/end). */
 const WATCHDOG_MS = 120000;
+/** A single tool call gets a much longer leash: a real tool can run for
+ * minutes without emitting any event, so the 2-minute idle deadline above must
+ * not apply while a tool is open. */
+const MAX_TOOL_MS = 30 * 60 * 1000;
 /** Don't show a reference range until we have this many samples in a bucket. */
 const MIN_SAMPLES = 5;
 /** Keep only the most recent N durations per bucket. */
 const MAX_SAMPLES = 20;
 /** Bound the in-memory session table and the persisted lastDone map. */
 const SESSION_CAP = 64;
-/** Ignore absurd durations (a turn left running across a long suspend). */
-const MAX_TURN_MS = 30 * 60 * 1000;
+/** Ignore absurd durations (a turn left running across a long suspend).
+ *
+ * NOT meant to filter out merely long turns: measured turn durations in this
+ * workspace's real logs are p50 56s, p90 562s, p99 3496s, max 4493s (75 min).
+ * A 30-minute cap here silently dropped 3.3% of turns — exactly the slow ones
+ * the whole plugin exists to explain. 6h is far above any observed turn while
+ * still guarding the "app was suspended for a day" case. */
+const MAX_TURN_MS = 6 * 60 * 60 * 1000;
 /** Visible model output chunk kinds (exclude usage / finish / block-end). */
 const OUTPUT_CHUNKS = new Set(['block-start', 'text-delta', 'reasoning-delta', 'tool-call-delta']);
 
@@ -95,6 +134,29 @@ function streamSessionId(payload) {
 }
 function isSubagent(session) {
   return session?.header?.origin === 'subagent' || session?.origin === 'subagent';
+}
+/**
+ * Sessions proven to be subagents. `session/event` hands us the Session object,
+ * so its origin is authoritative there; `agent/assistant-stream` and
+ * `api-session/status` only carry an id (status carries nothing else), so a
+ * subagent that started streaming would otherwise open a provisional
+ * `startedMidTurn` row that `recordSample` refuses and `persistDone` still
+ * writes into `lastDone` — polluting history with a child agent's turn.
+ */
+const subagentSids = new Set();
+const SUBAGENT_MEMO_CAP = 512;
+function noteSubagent(sid) {
+  if (!subagentSids.has(sid)) {
+    if (subagentSids.size >= SUBAGENT_MEMO_CAP) {
+      const oldest = subagentSids.values().next().value;
+      if (oldest !== undefined) subagentSids.delete(oldest);
+    }
+    subagentSids.add(sid);
+  }
+  // A subagent may already have opened a provisional row through its stream or
+  // a status broadcast before its first `session/event` identified it. Drop it
+  // so the child's turn can never reach `lastDone` / `turnLedgers`.
+  states.delete(sid);
 }
 function reasonOf(event) {
   const r = event?.data?.reason;
@@ -237,31 +299,39 @@ function closeOpenTools(st, now) {
 /* ------------------------------------------------------------------ *
  * Persistence (survives browser refresh AND app restart)
  * ------------------------------------------------------------------ */
+function adoptPersisted(text) {
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed === 'object') {
+      persisted = {
+        samples: parsed.samples && typeof parsed.samples === 'object' ? parsed.samples : {},
+        lastDone: parsed.lastDone && typeof parsed.lastDone === 'object' ? parsed.lastDone : {},
+        turnLedgers:
+          parsed.turnLedgers && typeof parsed.turnLedgers === 'object' ? parsed.turnLedgers : {},
+      };
+    }
+  } catch {
+    /* corrupt file: start fresh rather than crash the host */
+  }
+}
 function loadPersisted() {
   return readFile(SAMPLES_FILE, 'utf8')
-    .then((text) => {
-      try {
-        const parsed = JSON.parse(text);
-        if (parsed && typeof parsed === 'object') {
-          persisted = {
-            samples: parsed.samples && typeof parsed.samples === 'object' ? parsed.samples : {},
-            lastDone: parsed.lastDone && typeof parsed.lastDone === 'object' ? parsed.lastDone : {},
-            turnLedgers:
-              parsed.turnLedgers && typeof parsed.turnLedgers === 'object' ? parsed.turnLedgers : {},
-          };
-        }
-      } catch {
-        /* corrupt file: start fresh rather than crash the host */
-      }
-    })
-    .catch(() => {});
+    .then(adoptPersisted)
+    .catch(() =>
+      // One-time migration from the v2.0.0 in-package location. The old file is
+      // left untouched (a package folder may be read-only) and is never written
+      // again; the next save lands in the storage directory.
+      readFile(LEGACY_SAMPLES_FILE, 'utf8').then(adoptPersisted).catch(() => {}),
+    );
 }
 function scheduleSave() {
   if (saveTimer !== null) return;
   saveTimer = setTimeout(() => {
     saveTimer = null;
     void loaded.then(() =>
-      writeFile(SAMPLES_FILE, JSON.stringify(persisted), 'utf8').catch(() => {}),
+      mkdir(STORAGE_DIR, { recursive: true })
+        .then(() => writeFile(SAMPLES_FILE, JSON.stringify(persisted), 'utf8'))
+        .catch(() => {}),
     );
   }, 800);
 }
@@ -371,7 +441,14 @@ function clearPending(st, now) {
 }
 function handleSessionEvent(session, event) {
   const sid = sessionIdOf(session);
-  if (sid === '' || isSubagent(session)) return;
+  if (sid === '') return;
+  if (isSubagent(session)) {
+    // Remember the id so the stream/status feeds, which never see the Session
+    // object, can also refuse this child, and drop any provisional row it
+    // managed to open before we learned it was a subagent.
+    noteSubagent(sid);
+    return;
+  }
   const type = event?.type;
   if (typeof type !== 'string') return;
   const now = Date.now();
@@ -460,8 +537,22 @@ function handleSessionEvent(session, event) {
       }
       break;
     case 'user/message':
-      // A real user interjection closes the turn we were watching.
-      if (event?.data?.source?.kind === 'user') endTurn(cur, now, 'interrupted');
+      // DANGER: the message that OPENS a turn is appended ~35ms AFTER
+      // `turn/start` (measured in a real session log: turn/start @t+0,
+      // step/start @t+33, user/message{source.kind:'user'} @t+35). A blanket
+      // "a user message ends the turn" rule therefore killed every
+      // authoritative turn ~36ms after it began, recording `interrupted`
+      // ledgers and leaving the history buckets permanently empty.
+      //
+      // When `turn/start` was observed the turn has an authoritative
+      // `turn/end`, and a mid-turn user message is spliced into the running
+      // turn (`agent/inbox/spliced`) instead of closing it — so there is
+      // nothing to do here. This branch only serves the fallback path, where
+      // we joined a turn already in progress and the next user prompt means
+      // the turn we were guessing at is over.
+      if (!cur.sawTurnStart && event?.data?.source?.kind === 'user' && now - cur.startedAt > 1000) {
+        endTurn(cur, now, 'interrupted');
+      }
       break;
     default:
       break;
@@ -469,7 +560,7 @@ function handleSessionEvent(session, event) {
 }
 function handleStream(payload) {
   const sid = streamSessionId(payload);
-  if (sid === '') return;
+  if (sid === '' || subagentSids.has(sid)) return;
   const frame = payload?.frame;
   const type = frame?.type;
   if (type !== 'start' && type !== 'chunk' && type !== 'end') return;
@@ -492,7 +583,7 @@ function handleStream(payload) {
   if (st.openTools.size === 0) st.stage = 'generating';
 }
 function handleStatus(sid, running) {
-  if (typeof sid !== 'string' || sid === '') return;
+  if (typeof sid !== 'string' || sid === '' || subagentSids.has(sid)) return;
   const now = Date.now();
   const st = states.get(sid);
   if (running === true) {
@@ -510,13 +601,21 @@ function handleStatus(sid, running) {
     endTurn(st, now, 'completed');
   }
 }
-/** Safety net: a turn with no activity at all for WATCHDOG_MS is over. */
+/** Safety net: a turn with no activity at all for WATCHDOG_MS is over.
+ *
+ * An OPEN tool is deliberately exempt: a legitimately long tool call emits no
+ * session events and no stream frames while it runs (a real session log in this
+ * workspace contains a 120s tool/call -> tool/result gap), so a flat deadline
+ * would force-close a perfectly healthy turn and record a bogus `interrupted`
+ * ledger. Only a tool that never returns is bounded, by MAX_TOOL_MS.
+ */
 function watchdog() {
   const now = Date.now();
   for (const [, st] of states) {
-    if (st.phase === 'running' && now - st.lastActivityAt > WATCHDOG_MS) {
-      endTurn(st, now, 'interrupted');
-    }
+    if (st.phase !== 'running') continue;
+    const idle = now - st.lastActivityAt;
+    const limit = st.openTools.size > 0 ? MAX_TOOL_MS : WATCHDOG_MS;
+    if (idle > limit) endTurn(st, now, 'interrupted');
   }
 }
 
@@ -647,7 +746,7 @@ export function apply(ctx) {
           }
         },
       }),
-    'dsh-reply-timer: /reply-timer/state route',
+    'dsh-reply-timer: state route',
   );
 
   return () => {

@@ -4,8 +4,8 @@
 不知道是不是卡了、这一轮到底慢在哪」：
 
 - **等待中**：`⏳ 14.2s · 正在生成 · 工具 2 次`，带一个会呼吸的圆点；
-  副行显示 `模型仍在输出 · 最后活动 3s 前`。若超过 20 秒没有任何真实输出帧，
-  改为 `⚠ 23s 没有新输出 · 可能停滞`（这是对「卡住」的诚实判断，而非浏览器自嗨）。
+  副行显示 `模型仍在输出 · 最后活动 3s 前`。若超过 60 秒没有任何真实输出帧，
+  改为 `⚠ 63s 没有新输出 · 可能停滞`（这是对「卡住」的诚实判断，而非浏览器自嗨）。
   等审批/提问时显示 `⏸ 等待你确认 · 计时已暂停` 并暂停累计。
 - **结束后**：`✓ 本轮 31s`；点开可展开三段账本 `首字 / 工具耗时 / 生成耗时 / 工具次数`，
   以及按「工具次数分桶」的历史参考区间 `参考 18–40s · 中位 26s`。
@@ -23,8 +23,8 @@ v2 把计时搬到**宿主半场**，由真实事件驱动，客户端只做诚�
 
 | 半场 | 文件 | 职责 |
 | --- | --- | --- |
-| Host | `index.js` | 订阅 `session/event`（`turn/start`·`turn/end`·`tool/call`·`tool/result`·`approval/asked`·`user/message`）、`agent/assistant-stream`（首字帧时间戳）、`api-session/status`、`session/disposed`；测量三段耗时与工具并行区间；把 `lastDone` 与历史样本持久化到 `samples.json`；通过 `webServer.register({kind:'exact', path:'/reply-timer/state'})` 暴露只读快照。 |
-| Client | `client.js` | 以 `document.baseURI` 为基准轮询该路由（运行中 400ms / 空闲 1500ms，同源相对 GET）；把宿主快照渲染进 composer dock；本地 200ms tick 仅用于平滑插值与圆点动画。 |
+| Host | `index.js` | 订阅 `session/event`（`turn/start`·`turn/end`·`tool/call`·`tool/result`·`approval/asked`·`user/message`）、`agent/assistant-stream`（首字帧时间戳）、`api-session/status`、`session/disposed`；测量三段耗时与工具并行区间；把 `lastDone` 与历史样本持久化到 `$DSH_HOME/storages/dsh-reply-timer/samples.json`；通过 `webServer.register({kind:'exact', path:'/__dsh-reply-timer/state'})` 暴露只读快照。 |
+| Client | `client.js` | 以 `document.baseURI` 为基准轮询该路由（运行中 1s / 空闲 3s，同源相对 GET）；把宿主快照渲染进 composer dock；本地 250ms tick 仅用于平滑插值与圆点动画。 |
 
 关键点：
 
@@ -35,8 +35,11 @@ v2 把计时搬到**宿主半场**，由真实事件驱动，客户端只做诚�
   生成 = 总时长扣掉工具与暂停。首字未观测到就写「未观测到」，不填 0。
 - **参考区间**：按 `toolCount` 分 `plain / few / many` 三桶，各保留最近 20 个样本，
   `n ≥ 5` 才用 0.2 / 0.5 / 0.8 分位给出区间；不足就明说还差几轮。
-- **持久化**：`node:fs/promises` 写到包内 `samples.json`（800ms 防抖），
-  刷新页面 / 重启应用后账本与历史仍在；不引入 `storageDomain`、不改会话数据、不加新事件类型。
+- **持久化**：`node:fs/promises` 写到 `$DSH_HOME/storages/dsh-reply-timer/samples.json`
+  （`DSH_HOME` 缺省 `~/.dsh`，与 dsh-cost-meter / dsh-ops / dsh-better-sidebar 一致；800ms 防抖），
+  刷新页面 / 重启应用后账本与历史仍在；不写入包目录，升级插件不会丢历史。不引入 `storageDomain`、不改会话数据、不加新事件类型。
+- **只跟随本会话**：`conversation.composer.dock` 是 `scope: 'session'` 的 slot，注册时用
+  `inject: (sessionId) => ({ t, sessionId })` 拿到归属会话 id，多标签页 / 多会话不会显示别人的计时。
 - **安全**：路由用 `connection.requestRejection(req)` 做同源/回环校验（与 dsh-better-sidebar 一致），
   只接受 GET；客户端 `mode:'same-origin'`、`cache:'no-store'`，不带任何 token。
 - 主题色 `var(--dsw-alias-*, fallback)`，纯 inline style，不注入 CSS、不用 iframe、
@@ -48,11 +51,11 @@ v2 把计时搬到**宿主半场**，由真实事件驱动，客户端只做诚�
 | --- | --- |
 | `index.js` | 宿主半场（事件计时 + 持久化 + 只读路由），ESM |
 | `client.js` | 客户端半场，懒加载 CJS 工厂，注册进 `conversation.composer.dock` |
-| `samples.json` | 运行时生成的历史样本 / 最近账本（首次回答后自动出现；已被 `.gitignore` 排除，不进仓库 / 发布包） |
+| `samples.json` | 运行时生成的历史样本 / 最近账本，落在 `$DSH_HOME/storages/dsh-reply-timer/`（首次回答后自动出现；不进仓库 / 发布包） |
 | `cordis.patch.yml` | 插入一条 loader 记录 |
-| `locale/{zh,en}.json` | 插件页展示用的 `meta.title` / `meta.description` |
+| `locale/{zh,en}.json` | 插件页展示用的 `meta.title` / `meta.description` / `meta.detail` |
 | `icon.svg` | 插件图标 |
-| `screenshots.json` + `screenshots/` | 插件市场用的界面示意图（1–8 张，相对路径） |
+| `docs/DETAIL.md` + `docs/preview.svg` | 插件详情页的特性图（`meta.detail` 指向，只放一张自包含 SVG） |
 | `SUBMISSION.md` | 向 awesome-dsh-plugin 投稿的中文操作指南 |
 | `LICENSE` | MIT 许可证 |
 | `.gitignore` | 排除运行时产物（`samples.json`、`*.tgz` 等） |
@@ -63,19 +66,40 @@ v2 把计时搬到**宿主半场**，由真实事件驱动，客户端只做诚�
 - `ctx.on("session/event" | "agent/assistant-stream" | "api-session/status" | "session/disposed", ...)`
 - `ctx.webServer.register({ kind, path, handler(req, res) })` — Node 风格 `(req,res)`，`kind:'exact'`
 - `ctx.connection.requestRejection(req)` — 请求来源校验
-- `ctx.slots.inject(SLOT, () => ctx.slots.register({ name, id, order }, Component))`
+- `ctx.slots.inject(SLOT, () => ctx.slots.register({ name, id, order, inject }, Component))`
 - `ctx.locale.register(NS, {zh, en})` + `ctx.locale.bind(NS)`，包在 `ctx.effect` 里便于 HMR 反注册
 - `require('react')`（shell 注入，含 `useSyncExternalStore`），不引用任何 Harness Client 包
 
 ## 验证状态
 
-- 代码：`index.js` / `client.js` 经 Electron (`ELECTRON_RUN_AS_NODE=1`) `--check` 语法检查通过；
+- 代码：`index.js` / `client.js` 经 Node `--check` 语法检查通过；
   所有 JSON / 清单有效；用 mock ctx 驱动真实事件序列做过端到端断言（10 项全过，
   三段账本 `总耗时 = 首字 + 工具 + 生成` 精确自洽）。
 - 安装：`plugin_manager install_bundle` 返回 `application: applied`；`list_plugins` 显示
-  `fiberPhase: active`；路由 `/reply-timer/state` 已注册（无登录 cookie 的命令行请求
-  被 `connection.requestRejection` 拦为 403，属预期）；宿主半区真实落盘 `samples.json`。
-- 浏览器：完整重启 App 后，widget 已在输入框下方渲染；字体加深与「点空白 / Esc 收起明细」
-  的交互修复均经用户实测确认。
+  `fiberPhase: active`；路由 `/__dsh-reply-timer/state` 已注册（无登录 cookie 的命令行请求
+  被 `connection.requestRejection` 拦为 403，属预期）；宿主半区真实落盘
+  `$DSH_HOME/storages/dsh-reply-timer/samples.json`。
+- 浏览器：v2.0.0 完整重启 App 后 widget 已在输入框下方渲染；字体加深与「点空白 / Esc 收起明细」
+  的交互修复均经用户实测确认。v2.1.0 另修了 slot 会话绑定（改用 `inject` 取 sessionId）、
+  路由加 `__dsh-` 唯一前缀、样本迁出包目录、轮询降频，并补了详情页 `docs/DETAIL.md`。
+- v2.2.0 修了两个真实会话日志暴露的记账 bug：①开回合的 `user/message` 在 `turn/start`
+  之后约 35ms 才落盘，旧代码据此把每个回合判成 36ms 的 `interrupted`，导致参考区间永远
+  攒不到样本——现在权威回合只认 `turn/end`，该分支仅服务没观测到 `turn/start` 的回退路径；
+  ②实例日志里存在 120s 的 `tool/call`→`tool/result` 空档，旧的 120s 空闲看门狗会把健康的
+  长时间工具回合误杀——现在有未闭合工具时改用 30 分钟上限。另加 `tests/_replay-session.mjs`，
+  拿真实会话日志（1610 事件 / 13 万帧）回放校验：四个已完成回合的时长、三段账本、工具计数
+  全部与原日志一致。
+- v2.3.0 修了子代理污染：`agent/assistant-stream` 与 `api-session/status` 只带 session id，
+  拿不到 `origin`，子代理开流时会先建一条 `startedMidTurn` 的临时行，回合结束时照样写进
+  `lastDone`，把历史挤满子代理的耗时（`recordSample` 又因 midTurn 跳过，于是样本永远为空）。
+  现在一旦 `session/event` 认出子代理，就把该 id 记进拒绝表并删掉临时行，两条只带 id 的
+  通路也随之拒收。`tests/_test-host.mjs` 增加了一条子代理回归用例。
+- v2.4.0 按真实日志重新标定了两个阈值（此前两者都会静默吃掉最该被记录的场景）：
+  ①`MAX_TURN_MS` 从 30 分钟放宽到 6 小时——本工作区 122 个真实回合的时长分布是
+  p50 56s / p90 562s / p99 3496s / 最长 4493s（75 分钟），旧的 30 分钟上限让 3.3% 的回合
+  既不入样本也不写账本，而它们正是「这一轮到底慢在哪」最需要答案的那种回合；
+  ②`STALL_MS` 从 20 秒放宽到 60 秒——实测每个 step 的「模型首字等待」p99 达 78 秒、
+  6.1% 的 step 超过 20 秒，旧值会让界面在正常思考时反复闪「疑似停滞」。新增
+  `tests/_test-longturn.mjs`，用假时钟跑一个 4493 秒的回合，断言它仍然入样本、仍有账本。
 - 参考区间需要攒够 5 轮同类回复才出现，这是刻意设计——样本不足时绝不编造倒计时。
 - 本包以 `link:` 软链安装时，改 `client.js` 无需重装；完整重启后改 `index.js` 需再次重启。

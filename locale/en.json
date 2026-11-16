@@ -1,6 +1,7 @@
 {
   "meta": {
     "title": "Reply Timer",
-    "description": "A live timer under the composer: elapsed time, current stage and tool count, with stall detection driven by the host's real output frames (warns after 20s with no output). On completion it prints a first-token / tool / generation ledger plus a reference range learned from similar past turns (only shown with enough samples, never a fake countdown). Durations and history are persisted by the host, so they survive a page refresh and an app restart."
+    "description": "A live timer under the composer: elapsed time, current stage and tool count, with stall detection driven by the host's real output frames (warns after 60s with no output). On completion it prints a first-token / tool / generation ledger plus a reference range learned from similar past turns (only shown with enough samples, never a fake countdown). It tracks only the session it is mounted in, so extra tabs cannot borrow another session's countdown, and the host persists durations and history under the DSH config directory, so they survive a page refresh and an app restart.",
+    "detail": "docs/DETAIL.md"
   }
 }

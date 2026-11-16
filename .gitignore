@@ -8,3 +8,6 @@ samples.json
 .DS_Store
 Thumbs.db
 *.swp
+
+# 真实会话日志：含对话正文与工具参数，绝不进仓库
+tests/_real-session.full.jsonl

@@ -43,7 +43,7 @@ window.__ModuleLoader__.load({
     var ID = 'dsh-reply-timer';
     var NS = 'dsh-reply-timer';
     var SLOT = 'conversation.composer.dock';
-    var ROUTE = 'reply-timer/state';
+    var ROUTE = '__dsh-reply-timer/state';
     var PREF_KEY = 'dsh-reply-timer:prefs';
 
     var reduceMotion =
@@ -324,6 +324,7 @@ window.__ModuleLoader__.load({
      * ---------------------------------------------------------------- */
     function sessionIdFromProps(p) {
       if (!p) return '';
+      if (typeof p === 'string') return p;
       if (typeof p.sessionId === 'string' && p.sessionId) return p.sessionId;
       if (typeof p.sessionID === 'string' && p.sessionID) return p.sessionID;
       if (typeof p.id === 'string' && p.id) return p.id;
@@ -331,6 +332,14 @@ window.__ModuleLoader__.load({
       if (p.conversation && typeof p.conversation.sessionId === 'string') return p.conversation.sessionId;
       return '';
     }
+    /**
+     * Fallback only. The authoritative session id comes from the slot's
+     * session-scoped `inject` face (see the register() call in apply), which is
+     * the documented contract for a scope:'session' slot. `ctx.sessions.list`
+     * is NOT part of the Client `sessions` Service contract (retain / using /
+     * retainInfo / refreshProjections / search / fork / scope / binding), so it
+     * is probed defensively and never relied on for correctness.
+     */
     function currentSessionId(ctx) {
       try {
         var list = ctx && ctx.sessions && ctx.sessions.list;
@@ -353,8 +362,22 @@ window.__ModuleLoader__.load({
       if (!snap) return null;
       var sessions = snap.sessions || {};
       var lastDone = snap.lastDone || {};
+      // Once the slot tells us which session this dock belongs to, show ONLY
+      // that session. Falling back to "some other running session" is what made
+      // a multi-tab / multi-session GUI display a stranger's countdown, which is
+      // worse than showing nothing.
+      if (preferredSid) {
+        var own = sessions[preferredSid];
+        if (own && own.phase === 'running') return { raw: own, sid: preferredSid, live: true };
+        if (own && own.phase === 'done' && (own.totalMs || 0) > 0) {
+          return { raw: own, sid: preferredSid, live: true };
+        }
+        if (lastDone[preferredSid] && (lastDone[preferredSid].totalMs || 0) > 0) {
+          return { raw: lastDone[preferredSid], sid: preferredSid, live: false };
+        }
+        return null;
+      }
       var order = [];
-      if (preferredSid) order.push(preferredSid);
       var cur = store.getCurrentSid();
       if (cur && order.indexOf(cur) < 0) order.push(cur);
       var last = store.getLastSid();
@@ -420,7 +443,7 @@ window.__ModuleLoader__.load({
         v.idleMs = Math.max(0, (raw.idleMs || 0) + sinceReceipt);
         v.stalled =
           !!raw.stalled ||
-          (raw.openTools === 0 && v.idleMs > (snap.stallMs || 20000));
+          (raw.openTools === 0 && v.idleMs > (snap.stallMs || 60000));
       } else {
         v.elapsedMs = v.totalMs;
       }
@@ -544,7 +567,10 @@ window.__ModuleLoader__.load({
     function Widget(props) {
       useSyncExternalStore(store.subscribe, store.getVersion, store.getVersion);
       var t = props.t;
-      var preferredSid = sessionIdFromProps(props.ownerProps);
+      // The dock is a session-scoped slot, so `sessionId` arrives through the
+      // registration's `inject` face. ownerProps is kept as a last resort for
+      // hosts that pass it through instead (it is [] on the current GUI).
+      var preferredSid = sessionIdFromProps(props.sessionId) || sessionIdFromProps(props.ownerProps);
       var snap = store.getSnap();
       var enabled = store.getEnabled();
       var v = buildView(snap, preferredSid, t);
@@ -675,13 +701,33 @@ window.__ModuleLoader__.load({
       } catch (e) {}
 
       // Register the dock widget. Each slot registration is independent so a
-      // host lacking one seat cannot lose the others.
+      // host lacking one seat cannot lose the others. `inject` is what makes
+      // the widget session-accurate: `conversation.composer.dock` is a
+      // scope:'session' slot, so the Host hands the owning session id to the
+      // registration's inject face (same shape as dsh-connect-workbuddy's
+      // `inject: (sessionId) => ({ t, sessionId })`). Without it the widget has
+      // no way to know which dock it was mounted in.
       try {
         if (h && ctx.slots && typeof ctx.slots.inject === 'function') {
           ctx.slots.inject(SLOT, function () {
             return ctx.slots.register(
-              { name: SLOT, id: ID, order: 60, label: function () { return 'Reply Timer'; } },
-              function (ownerProps) { return h(Widget, { ctx: ctx, t: t, ownerProps: ownerProps }); },
+              {
+                name: SLOT,
+                id: ID,
+                order: 60,
+                label: function () { return 'Reply Timer'; },
+                inject: function (sessionId) {
+                  return { t: t, sessionId: typeof sessionId === 'string' ? sessionId : '' };
+                },
+              },
+              function (face) {
+                return h(Widget, {
+                  ctx: ctx,
+                  t: (face && face.t) || t,
+                  sessionId: (face && face.sessionId) || '',
+                  ownerProps: face,
+                });
+              },
             );
           });
         }
@@ -698,7 +744,11 @@ window.__ModuleLoader__.load({
       }
       function schedulePoll() {
         if (disposed) return;
-        var period = store.hasRunning() ? 400 : 1500;
+        // The Host snapshot is a coarse signal (phase / ledger / last activity);
+        // smooth elapsed time comes from the local tick, not from the poll. A
+        // 1 s period while running (was 400 ms = 2.5 req/s per tab) is plenty
+        // and keeps a multi-tab GUI from hammering one Host route.
+        var period = store.hasRunning() ? 1000 : 3000;
         pollTimer = setTimeout(function () {
           pollTimer = null;
           pollOnce()
@@ -713,7 +763,7 @@ window.__ModuleLoader__.load({
         // Local tick: smooth pulse + live elapsed between polls.
         tickTimer = setInterval(function () {
           if (store.hasRunning()) store.bump();
-        }, 200);
+        }, 250);
         // Kick off immediately, then self-reschedule with an adaptive period.
         pollOnce()
           .then(function (value) { if (!disposed && value) store.setSnap(value); })
