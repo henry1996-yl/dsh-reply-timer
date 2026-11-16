@@ -55,7 +55,8 @@ v2 把计时搬到**宿主半场**，由真实事件驱动，客户端只做诚�
 | `cordis.patch.yml` | 插入一条 loader 记录 |
 | `locale/{zh,en}.json` | 插件页展示用的 `meta.title` / `meta.description` / `meta.detail` |
 | `icon.svg` | 插件图标 |
-| `docs/DETAIL.md` + `docs/preview.svg` | 插件详情页的特性图（`meta.detail` 指向，只放一张自包含 SVG） |
+| `docs/DETAIL.md` + `docs/preview.svg` | DSH 插件详情页的特性图（`locale/*.json` 的 `meta.detail` 指向，只放一张自包含 SVG） |
+| `screenshots.json` + `screenshots/*.png` | 市场门店卡片图（awesome-dsh-plugin 的 `probe-screenshots.mjs` 读仓库根这份 JSON；纯路径数组格式） |
 | `SUBMISSION.md` | 向 awesome-dsh-plugin 投稿的中文操作指南 |
 | `LICENSE` | MIT 许可证 |
 | `.gitignore` | 排除运行时产物（`samples.json`、`*.tgz` 等） |
@@ -101,5 +102,10 @@ v2 把计时搬到**宿主半场**，由真实事件驱动，客户端只做诚�
   ②`STALL_MS` 从 20 秒放宽到 60 秒——实测每个 step 的「模型首字等待」p99 达 78 秒、
   6.1% 的 step 超过 20 秒，旧值会让界面在正常思考时反复闪「疑似停滞」。新增
   `tests/_test-longturn.mjs`，用假时钟跑一个 4493 秒的回合，断言它仍然入样本、仍有账本。
+- v2.4.1 补回市场门店图：`screenshots.json` 恢复为**纯路径数组**（原包写的是
+  `{"src","alt"}` 对象数组，awesome-dsh-plugin 的 `scripts/probe-screenshots.mjs`
+  只认字符串数组 / `{"screenshots": [...]}` / 单键 URL 映射三种形态，对象元素的写法会
+  被判为「every entry must be a non-empty string」而整份失效）。它与 `docs/DETAIL.md`
+  是两个不同的消费方，各自都需要：前者供市场卡片，后者供 DSH 插件详情页。
 - 参考区间需要攒够 5 轮同类回复才出现，这是刻意设计——样本不足时绝不编造倒计时。
 - 本包以 `link:` 软链安装时，改 `client.js` 无需重装；完整重启后改 `index.js` 需再次重启。
