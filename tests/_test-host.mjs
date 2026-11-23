@@ -2,7 +2,7 @@
  * Mock harness for index.js — verifies v2.1.0 host behaviour:
  *   1. the route is registered under the new `__dsh-` prefixed path;
  *   2. a full turn produces a self-consistent ledger;
- *   3. samples persist under $DSH_HOME/storages/dsh-reply-timer/samples.json,
+ *   3. the ledger persists under $DSH_HOME/storages/dsh-reply-timer/samples.json,
  *      NOT inside the package folder.
  */
 import { mkdtemp, readFile, rm, access } from 'node:fs/promises';
@@ -111,15 +111,15 @@ console.log('disk keys =', Object.keys(disk).join(','));
 console.log('disk lastDone has sid =', Object.prototype.hasOwnProperty.call(disk.lastDone, sid));
 console.log('in-package samples.json created =', existsSync(legacy) && !hadLegacy);
 if (existsSync(legacy) && !hadLegacy) throw new Error('plugin wrote inside its own package folder');
-console.log('sample buckets =', JSON.stringify(Object.keys(disk.samples)));
+console.log('sample buckets =', JSON.stringify(Object.keys(disk.samples || {})));
 if (Object.prototype.hasOwnProperty.call(disk.lastDone, childSid)) {
   throw new Error('subagent turn reached lastDone: ' + JSON.stringify(disk.lastDone[childSid]));
 }
 if (Object.prototype.hasOwnProperty.call(disk.turnLedgers, childSid)) {
   throw new Error('subagent turn reached turnLedgers');
 }
-if (!disk.samples.few || disk.samples.few.length !== 1) {
-  throw new Error('the real turn did not land in a sample bucket: ' + JSON.stringify(disk.samples));
+if (!disk.turnLedgers[sid] || Object.keys(disk.turnLedgers[sid]).length !== 1) {
+  throw new Error('the real turn did not land in turnLedgers: ' + JSON.stringify(disk.turnLedgers));
 }
 
 /* ---- ledger must partition the wall time exactly ------------------- */

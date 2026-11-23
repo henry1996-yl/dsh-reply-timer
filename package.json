@@ -1,6 +1,6 @@
 {
   "name": "dsh-reply-timer",
-  "version": "2.4.1",
+  "version": "2.5.0",
   "description": "会话回复计时器（自适应版）：宿主事件驱动的真实心跳与停滞检测、首字/工具/生成三段账本、按同类历史的参考用时区间，刷新与重启后仍在。",
   "license": "MIT",
   "author": "dsh-reply-timer contributors",

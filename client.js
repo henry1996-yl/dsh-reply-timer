@@ -11,10 +11,8 @@
  *     backend stall is reported as 疑似停滞 instead of "没卡住";
  *   - stage, tool count and the 首字/工具/生成 ledger come from the Host's
  *     measured values, never from list-row guesses;
- *   - per-bucket history medians give a REAL reference range (the honest form
- *     of "预计用时"), shown only after enough samples — never a fake countdown;
- *   - the done ledger and the history survive a browser refresh AND an app
- *     restart because the Host persists them to samples.json.
+ *   - the done ledger survives a browser refresh AND an app restart because the
+ *     Host persists it to samples.json.
  *
  * Transport: same-origin relative GET against `document.baseURI`, exactly the
  * pattern dsh-notify-me / dsh-better-sidebar use for their plugin routes. In
@@ -65,8 +63,6 @@ window.__ModuleLoader__.load({
       lastActivity: '最后活动 {s} 前',
       stalled: '⚠ {s} 没有新输出 · 可能停滞',
       tools: '工具 {n} 次',
-      refRange: '参考 {lo}–{hi} · 中位 {median}',
-      refSamples: '再观测 {n} 轮后给出参考区间',
       donePrefix: '本轮',
       midTurn: '观测（中途接入）',
       endedInterrupted: '（已中断）',
@@ -79,7 +75,6 @@ window.__ModuleLoader__.load({
       genTime: '生成耗时',
       toolCount: '工具次数',
       pausedTime: '其中等待确认',
-      samples: '参考区间基于 {n} 次同类回复',
       toggleOn: '显示计时器',
       toggleOff: '计时器已关闭 · 点击开启',
       turnOffTimer: '关闭计时器',
@@ -87,7 +82,6 @@ window.__ModuleLoader__.load({
       expand: '点击展开明细',
       collapse: '点击收起',
       noData: '计时器待命',
-      ready: '参考中位 {median}',
     };
     var EN = {
       idle: 'Timer · waiting for a turn',
@@ -100,8 +94,6 @@ window.__ModuleLoader__.load({
       lastActivity: 'last output {s} ago',
       stalled: '⚠ No output for {s} · may be stalled',
       tools: '{n} tools',
-      refRange: 'Typical {lo}–{hi} · median {median}',
-      refSamples: 'Reference range after {n} more turns',
       donePrefix: 'Turn',
       midTurn: 'Observed (joined mid-turn)',
       endedInterrupted: '(interrupted)',
@@ -114,7 +106,6 @@ window.__ModuleLoader__.load({
       genTime: 'Generation time',
       toolCount: 'Tool calls',
       pausedTime: 'of which waiting',
-      samples: 'Range based on {n} similar turns',
       toggleOn: 'Show timer',
       toggleOff: 'Timer off · click to enable',
       turnOffTimer: 'Turn off timer',
@@ -122,7 +113,6 @@ window.__ModuleLoader__.load({
       expand: 'Click for details',
       collapse: 'Click to collapse',
       noData: 'Timer standby',
-      ready: 'Median {median}',
     };
 
     function fallbackDict(ctx) {
@@ -355,9 +345,6 @@ window.__ModuleLoader__.load({
       } catch (e) {}
       return '';
     }
-    function bucketOf(toolCount) {
-      return toolCount === 0 ? 'plain' : toolCount <= 2 ? 'few' : 'many';
-    }
     function pickRaw(snap, preferredSid) {
       if (!snap) return null;
       var sessions = snap.sessions || {};
@@ -447,10 +434,6 @@ window.__ModuleLoader__.load({
       } else {
         v.elapsedMs = v.totalMs;
       }
-      // Reference range for this turn's tool-count bucket.
-      var hist = snap.history && snap.history[bucketOf(v.toolCount)];
-      v.hist = hist || { n: 0, ready: false };
-      v.minSamples = snap.minSamples || 5;
       return v;
     }
 
@@ -522,7 +505,6 @@ window.__ModuleLoader__.load({
         parts.push('⏳ ' + fmtMs(v.elapsedMs));
         parts.push(' · ' + t(v.stage === 'tool' ? 'tool' : v.stage === 'generating' ? 'generating' : v.stage === 'paused' ? 'paused' : 'thinking'));
         if (v.toolCount > 0) parts.push(' · ' + t('tools', { n: v.toolCount }));
-        if (v.hist.ready) parts.push(' · ' + t('ready', { median: fmtSecs(v.hist.median) }));
       } else {
         var label = v.startedMidTurn ? t('midTurn') : t('donePrefix') + ' ' + fmtMs(v.totalMs);
         parts.push('✓ ' + label);
@@ -555,11 +537,6 @@ window.__ModuleLoader__.load({
         add(t('toolCount'), String(v.toolCount));
       } else {
         add(t('toolCount'), String(v.toolCount) + (v.currentTool ? ' · ' + v.currentTool : ''));
-      }
-      if (v.hist.ready) {
-        add(t('refRange', { lo: fmtSecs(v.hist.lo), hi: fmtSecs(v.hist.hi), median: fmtSecs(v.hist.median) }), t('samples', { n: v.hist.n }));
-      } else {
-        lines.push(el('div', { style: C.hint, key: 'samples' }, t('refSamples', { n: Math.max(0, v.minSamples - v.hist.n) })));
       }
       return lines;
     }

@@ -24,7 +24,7 @@
 | `screenshots.json` + `screenshots/*.png` | 市场门店卡片图（awesome-dsh-plugin 的 `scripts/probe-screenshots.mjs` 直接读仓库根这份 JSON，必须是**纯路径数组**） | ✅ 已按该格式修正 |
 | `submission/henry1996-yl__dsh-reply-timer.yml` | 投稿 YAML（**这个文件不要放进插件根目录发布**，见步骤 2） | ✅ 已填好，可直接复制 |
 | `README.md` / `locale/{zh,en}.json` | 描述与真实功能一致（可人工评审核对） | ✅ |
-| `dsh-reply-timer-2.4.1.tgz` | 预构建的 Release 资产（见步骤 1 的可选项） | 与本包同级目录生成 |
+| `dsh-reply-timer-2.5.0.tgz` | 预构建的 Release 资产（见步骤 1 的可选项） | 与本包同级目录生成 |
 
 **投稿 YAML 文件名规则**：`data/plugins/<owner>__<repo>.yml` → `henry1996-yl__dsh-reply-timer.yml`，
 已按此命名。
@@ -37,7 +37,7 @@
 cd dsh-reply-timer
 git init
 git add .
-git commit -m "dsh-reply-timer v2.4.1: honest reply timer with stall detection and ledger"
+git commit -m "dsh-reply-timer v2.5.0: honest reply timer with stall detection and ledger"
 # 用 gh（需已登录）或到 GitHub 网页新建公开仓库，然后：
 gh repo create dsh-reply-timer --public --source=. --remote=origin --push
 gh repo edit henry1996-yl/dsh-reply-timer --add-topic dsh-plugin   # CI/人工评审的硬性要求
@@ -49,11 +49,11 @@ gh repo edit henry1996-yl/dsh-reply-timer --add-topic dsh-plugin   # CI/人工�
 
 > ⚠️ **仓库必须存在满 1 天**才能过 CI 的年龄检查（无提交数门槛）。今天建好，明天再提 PR。
 
-**（可选）用 tgz 做预构建安装**：把 `dsh-reply-timer-2.4.1.tgz` 作为资产传到你仓库的 GitHub Release。
+**（可选）用 tgz 做预构建安装**：把 `dsh-reply-timer-2.5.0.tgz` 作为资产传到你仓库的 GitHub Release。
 在投稿 YAML 里加一行（资产名**不要带版本号**，`latest/download/` 以后会失效）：
 
 ```yaml
-tarball: https://github.com/henry1996-yl/dsh-reply-timer/releases/download/v2.4.1/dsh-reply-timer.tgz
+tarball: https://github.com/henry1996-yl/dsh-reply-timer/releases/download/v2.5.0/dsh-reply-timer.tgz
 ```
 
 发不发 npm、用不用 tarball 都不影响收录；源码安装是默认路径。

@@ -160,9 +160,9 @@ for (const [turn, startAt] of turnStarts) {
   if (turn <= 2 && led.ttftMs === null) fail(`turn ${turn} lost every stream frame (ttft is null)`);
 }
 
-const buckets = Object.entries(disk.samples);
-console.log('sample buckets =', JSON.stringify(buckets));
-if (buckets.length === 0) fail('no history samples were recorded (the v2.1.0 symptom)');
+const ledgerCount = Object.values(disk.turnLedgers || {}).reduce((n, m) => n + Object.keys(m).length, 0);
+console.log('turn ledgers =', ledgerCount);
+if (ledgerCount === 0) fail('no turn ledgers were recorded (the v2.1.0 symptom)');
 if (disk.lastDone['session-replay'] === undefined) fail('lastDone missing');
 
 // A completed turn must be the one that lands in lastDone at the end of the log.
@@ -177,4 +177,4 @@ if (failures > 0) {
   console.log(`\n${failures} assertion(s) failed`);
   process.exit(1);
 }
-console.log('\nOK: real-session replay — every completed turn kept its true duration and entered history');
+console.log('\nOK: real-session replay — every completed turn kept its true duration and entered turnLedgers');

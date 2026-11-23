@@ -15,7 +15,7 @@
   <path d="M152 250 V258 Q152 264 158 264 H496 Q502 264 502 258 V236"
         fill="none" stroke="#8b93a7" stroke-width="1.5" stroke-dasharray="4 6" opacity="0.35"/>
 
-  <!-- Right: the expanded ledger — three segments, then the reference range. -->
+  <!-- Right: the expanded ledger — three segments plus the tool count. -->
   <rect x="406" y="72" width="202" height="164" rx="16" fill="none" stroke="#8b93a7" stroke-width="2" opacity="0.45"/>
 
   <!-- 首字 / first token -->
@@ -30,7 +30,11 @@
   <rect x="424" y="164" width="36" height="8" rx="4" fill="#8b93a7" opacity="0.3"/>
   <rect x="470" y="160" width="118" height="16" rx="8" fill="#3aa675" opacity="0.9"/>
 
-  <!-- Reference range learned from similar turns: a track with a highlighted band. -->
-  <rect x="424" y="200" width="166" height="8" rx="4" fill="#8b93a7" opacity="0.22"/>
-  <rect x="470" y="200" width="58" height="8" rx="4" fill="#4d8bff" opacity="0.55"/>
+  <!-- 工具次数 / tool count: a row of small ticks, one per tool call. -->
+  <rect x="424" y="200" width="32" height="8" rx="4" fill="#8b93a7" opacity="0.3"/>
+  <rect x="470" y="198" width="12" height="12" rx="3" fill="#8b93a7" opacity="0.55"/>
+  <rect x="488" y="198" width="12" height="12" rx="3" fill="#8b93a7" opacity="0.55"/>
+  <rect x="506" y="198" width="12" height="12" rx="3" fill="#8b93a7" opacity="0.55"/>
+  <rect x="524" y="198" width="12" height="12" rx="3" fill="#8b93a7" opacity="0.55"/>
+  <rect x="542" y="198" width="12" height="12" rx="3" fill="#8b93a7" opacity="0.22"/>
 </svg>

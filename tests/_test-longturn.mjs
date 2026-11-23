@@ -75,16 +75,15 @@ if (Math.abs(st.totalMs - TOTAL) > 5) throw new Error('long turn lost time: ' + 
 
 await new Promise((r) => setTimeout(r, 1400));
 const disk = JSON.parse(await readFile(join(home, 'storages', 'dsh-reply-timer', 'samples.json'), 'utf8'));
-const buckets = Object.entries(disk.samples).filter(([, arr]) => arr.includes(TOTAL));
-console.log('sample buckets containing the long turn =', JSON.stringify(buckets.map(([k]) => k)));
-if (buckets.length !== 1) throw new Error('the 75-minute turn never entered a sample bucket: ' + JSON.stringify(disk.samples));
-
 const ledgers = disk.turnLedgers[sid] || {};
 const key = Object.keys(ledgers)[0];
 console.log('ledger =', key, '| totalMs =', ledgers[key] && ledgers[key].totalMs);
 if (!key) throw new Error('the 75-minute turn produced no ledger');
+if (Math.abs(ledgers[key].totalMs - TOTAL) > 5) {
+  throw new Error('the 75-minute turn lost time in the ledger: ' + ledgers[key].totalMs);
+}
 
 Date.now = realNow;
 for (const d of effects) { try { if (typeof d === 'function') d(); } catch {} }
 await rm(home, { recursive: true, force: true });
-console.log('OK: a 75-minute turn still lands in samples and turnLedgers');
+console.log('OK: a 75-minute turn still lands in turnLedgers');

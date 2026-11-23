@@ -31,12 +31,12 @@
  * are UNIONED (not summed), so parallel subagent / workflow / tool executions
  * do not inflate the 工具 number — that is the parallel-accounting behaviour.
  *
- * Completed turns are folded into small per-bucket history samples persisted
- * under the DSH profile (`<DSH_HOME>/storages/dsh-reply-timer/samples.json`,
- * DSH_HOME defaulting to `~/.dsh`), so the reference range survives a browser
- * refresh AND an app restart without ever writing inside the package folder.
- * `lastDone` keeps each session's most recent ledger, so the 账本 also survives
- * a refresh.
+ * Completed turns are persisted under the DSH profile
+ * (`<DSH_HOME>/storages/dsh-reply-timer/samples.json`, DSH_HOME defaulting to
+ * `~/.dsh`), so the ledger survives a browser refresh AND an app restart
+ * without ever writing inside the package folder. `lastDone` keeps each
+ * session's most recent ledger and `turnLedgers` keeps the recent per-turn
+ * ledgers, so the 账本 also survives a refresh.
  *
  * The Client reads a snapshot through ONE read-only same-origin route,
  * `/__dsh-reply-timer/state` (the `__dsh-` prefix is the convention every
@@ -94,10 +94,6 @@ const WATCHDOG_MS = 120000;
  * minutes without emitting any event, so the 2-minute idle deadline above must
  * not apply while a tool is open. */
 const MAX_TOOL_MS = 30 * 60 * 1000;
-/** Don't show a reference range until we have this many samples in a bucket. */
-const MIN_SAMPLES = 5;
-/** Keep only the most recent N durations per bucket. */
-const MAX_SAMPLES = 20;
 /** Bound the in-memory session table and the persisted lastDone map. */
 const SESSION_CAP = 64;
 /** Ignore absurd durations (a turn left running across a long suspend).
@@ -116,7 +112,7 @@ const OUTPUT_CHUNKS = new Set(['block-start', 'text-delta', 'reasoning-delta', '
  * disposed by the effect cleanup so HMR cannot leak subscriptions.
  * ------------------------------------------------------------------ */
 let states = new Map();
-let persisted = { samples: {}, lastDone: {}, turnLedgers: {} };
+let persisted = { lastDone: {}, turnLedgers: {} };
 let loaded = Promise.resolve();
 let saveTimer = null;
 
@@ -140,8 +136,8 @@ function isSubagent(session) {
  * so its origin is authoritative there; `agent/assistant-stream` and
  * `api-session/status` only carry an id (status carries nothing else), so a
  * subagent that started streaming would otherwise open a provisional
- * `startedMidTurn` row that `recordSample` refuses and `persistDone` still
- * writes into `lastDone` — polluting history with a child agent's turn.
+ * `startedMidTurn` row that `persistDone` still writes into `lastDone` —
+ * polluting the ledger with a child agent's turn.
  */
 const subagentSids = new Set();
 const SUBAGENT_MEMO_CAP = 512;
@@ -178,9 +174,6 @@ function toolNameOf(event) {
     if (typeof d?.[k] === 'string' && d[k].length > 0) return d[k];
   }
   return '';
-}
-function bucketOf(toolCount) {
-  return toolCount === 0 ? 'plain' : toolCount <= 2 ? 'few' : 'many';
 }
 function writeJson(res, status, body) {
   const payload = JSON.stringify(body);
@@ -304,7 +297,6 @@ function adoptPersisted(text) {
     const parsed = JSON.parse(text);
     if (parsed && typeof parsed === 'object') {
       persisted = {
-        samples: parsed.samples && typeof parsed.samples === 'object' ? parsed.samples : {},
         lastDone: parsed.lastDone && typeof parsed.lastDone === 'object' ? parsed.lastDone : {},
         turnLedgers:
           parsed.turnLedgers && typeof parsed.turnLedgers === 'object' ? parsed.turnLedgers : {},
@@ -334,21 +326,6 @@ function scheduleSave() {
         .catch(() => {}),
     );
   }, 800);
-}
-function recordSample(st) {
-  if (!(st.totalMs > 0) || st.totalMs > MAX_TURN_MS) return;
-  // Only fully-observed, normally-completed turns become history samples.
-  if (st.startedMidTurn) return;
-  if (st.endedReason !== '' && st.endedReason !== 'completed') return;
-  // If a provider streamed tool-call deltas but never emitted `tool/call` /
-  // `tool/result` session events, our tool bookkeeping is incomplete: bucketing
-  // this turn would pollute a history bucket with a wrong tool count. Skip it.
-  if (st.sawToolCallDelta && !st.sawToolEvent) return;
-  const bucket = bucketOf(st.toolCount);
-  const arr = persisted.samples[bucket] || (persisted.samples[bucket] = []);
-  arr.push(Math.round(st.totalMs));
-  if (arr.length > MAX_SAMPLES) arr.shift();
-  scheduleSave();
 }
 function persistDone(st) {
   persisted.lastDone[st.sid] = {
@@ -390,16 +367,6 @@ function persistDone(st) {
   }
   scheduleSave();
 }
-function historyOf(bucket) {
-  const arr = (persisted.samples?.[bucket] || [])
-    .filter((n) => Number.isFinite(n) && n > 0)
-    .slice()
-    .sort((a, b) => a - b);
-  const n = arr.length;
-  if (n < MIN_SAMPLES) return { n, ready: false };
-  const at = (q) => arr[Math.min(n - 1, Math.max(0, Math.floor((n - 1) * q)))];
-  return { n, ready: true, lo: at(0.2), median: at(0.5), hi: at(0.8) };
-}
 
 /* ------------------------------------------------------------------ *
  * Event handlers
@@ -430,7 +397,6 @@ function endTurn(st, now, reason) {
   st.endedReason = reason || 'completed';
   st.lastActivityAt = now;
   computeLedger(st);
-  recordSample(st);
   persistDone(st);
 }
 function clearPending(st, now) {
@@ -460,7 +426,7 @@ function handleSessionEvent(session, event) {
     if (existing === undefined || existing.phase !== 'running' || !existing.sawTurnStart) {
       // Frames or `api-session/status` may have opened a provisional turn.
       // `turn/start` is the authoritative boundary, so (re)start from here and
-      // drop the "joined mid-turn" flag — this turn's samples are trustworthy.
+      // drop the "joined mid-turn" flag — this turn's ledger is trustworthy.
       beginTurn(sid, now, false);
     }
     const cur = states.get(sid);
@@ -542,7 +508,7 @@ function handleSessionEvent(session, event) {
       // step/start @t+33, user/message{source.kind:'user'} @t+35). A blanket
       // "a user message ends the turn" rule therefore killed every
       // authoritative turn ~36ms after it began, recording `interrupted`
-      // ledgers and leaving the history buckets permanently empty.
+      // ledgers for turns that were still running.
       //
       // When `turn/start` was observed the turn has an authoritative
       // `turn/end`, and a mid-turn user message is spliced into the running
@@ -664,15 +630,9 @@ function snapshot() {
   return {
     serverNow: now,
     stallMs: STALL_MS,
-    minSamples: MIN_SAMPLES,
     sessions,
     lastDone: persisted.lastDone || {},
     turnLedgers: persisted.turnLedgers || {},
-    history: {
-      plain: historyOf('plain'),
-      few: historyOf('few'),
-      many: historyOf('many'),
-    },
   };
 }
 
